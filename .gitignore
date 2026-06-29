@@ -1,0 +1,15 @@
+# Entorno virtual
+.venv/
+
+# Configuración de VS Code
+.vscode/
+
+# Caché de Python
+__pycache__/
+*.py[cod]
+
+# Caché de notebooks
+.ipynb_checkpoints/
+
+# Variables de entorno
+.env
