@@ -61,11 +61,11 @@ PARTICLE_FILTER/
 
 La carpeta [demos] se tienen los siguientes ejemplos:
 
-- apf_lineal_example: aplicacion del Auxiliary Particle Filter para varios sistemas lineal y gaussianos
+- apf_lineal_examples: aplicacion del Auxiliary Particle Filter dos sistemas lineal y gaussianos, con y sin re-muestreo
 
-- bf_lineal_example: aplicacion del Bootstrap Particle Filter para varios sistemas lineal y gaussianos
+- bf_lineal_example: aplicacion del Bootstrap Particle Filter dos sistemas lineal y gaussianos, con y sin re-muestreo
 
-- weights_study: comparacion del filtro de particulas con y sin remuestreo
+- pendulo: aplicacion del Bootstrap Particle Filter y del Auxiliary Particle Filter para el seguimiento de la posición y la velocidad angular de un péndulo libre
 
 
 ### REQUIREMENTS
