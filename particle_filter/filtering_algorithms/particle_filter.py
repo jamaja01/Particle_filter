@@ -1,8 +1,8 @@
 import numpy as np
-from scipy.stats import multivariate_normal
+import time
 from scipy.special import logsumexp
 from abc import ABC, abstractmethod
-from utilities import as_covariance_matrix, as_vector
+from particle_filter.utilities import as_covariance_matrix, as_vector
 
 
 class ParticleFilter(ABC):
@@ -11,28 +11,38 @@ class ParticleFilter(ABC):
     Esta clase es el flujo base para realizar un filtro de partículas
 
     Params:
-        -N(int): número de partículas
-        -state_transition(callable): función transición de estado
-        -measurement_function(callable): función observación de estado
-        -Q(array: (state_dim,state_dim)): ruido en la ecuacion de estado
-        -R(array: (obs_dim, obs_dim)): ruido en la ecuacion de observacion
+        -N (int) Número de partículas
+        -transition_model (class TransitionModel) Modelo de transicion (incluido el ruido)
+        -observation_model (class ObservationModel) Modelo de observación (incluido el ruido)
+        -level(float): valor para la construcción de los intervalos de credibilidad
+
+    Return: un diccionario con
+        -estimates (ndarray (T, state_dim)) Estados ocultos estimados en cada tiempo
+        -normalized_weights (ndarray (T, N_particles)): array con los pesos normalizados en cada tiempo
+        -intervals (ndarray (T, state_dim, 2)): array con los intervalos de credibilidad en cada tiempo
+        -number_particles (int): numero de partículas
+        -number_resamples (int): numero de veces en las que se ha realizado re-muestreo
+        -execution_time (float): tiempo en segundos de ejecucion del filtrado
+        -log_likelihoods (array (T)): array con las log-verosimilitudes estimadas
+        -log_likelihood (float): log-verosimilitud estimada
     """
 
-    def __init__(self, N, state_transition, measurement_function, Q, R):
+    def __init__(self, N, transition_model, observation_model, level=0.95):
         
         self.N = int(N)
 
-        self.f = state_transition 
-        self.h =  measurement_function 
+        self.transition_model = transition_model
+        self.observation_model = observation_model
 
-        self.Q = as_covariance_matrix(Q) #(state_dim, state_dim) para ser utilizado en multivariate_normal
-        self.R = as_covariance_matrix(R) #(obs_dim, obs_dim) para ser utilizado en multivariate_normal
+        self.state_dim = transition_model.state_dim
 
-        self.state_dim = self.Q.shape[0]
-        self.obs_dim = self.R.shape[0]
+        self.level = level
 
         self.particles = np.zeros((self.N, self.state_dim))
         self.log_weights = np.zeros(self.N) 
+
+        self.resample_times = 0
+        self.log_norms = []
 
     #----------------
     # Inicializacion
@@ -53,55 +63,100 @@ class ParticleFilter(ABC):
 
         self.log_weights = np.full(self.N, -np.log(self.N))
 
+    #---------
+    # Reseteo
+    #---------
+    def reset(self, mean, cov):
+        """
+        "Resetea" el filtro de partículas para inciar con otro estado sin tener que instanciar
+        de nuevo el objeto 
+        """
+        self.initialize(mean, cov)
+        self.resample_times = 0
+        self.log_norms = []
+
+
     # -------------
     # Utilidades
     # -------------
     def get_weights(self):
         """
-        Obtiene los pesos normalizados a partir de los log-pesos: $w_i = e^log\_w_i / \sum_j e^log\_w_j$
-
-        Concretamente, para mayor establidad y evitar el efecto de underflow, se calcula $e^{log\_w_i - log(\sum_j e^log\_w_j)}$
+        Obtiene los pesos normalizados a partir de los log-pesos
         """
         
-        return np.exp(self.log_weights - logsumexp(self.log_weights))
+        return np.exp(self.log_weights)
 
     
-    def estimate(self):
+    def estimate(self, weights):
         """
         Estima, mediante una media ponderada por los pesos de la partículas, el estado oculto del sistema
         """
 
-        weights = self.get_weights()
-
         return np.average(self.particles, axis=0, weights=weights)
-
     
-    def effective_sample_size(self):
+
+    def log_likelihood(self):
+        """
+        Calcula, a partir del array con las log-verosimilitudes estimadas, la log-verosimilitud estimada de toda la distribución        
+        """
+
+        return np.sum(self.log_norms)
+
+
+    def credible_interval(self, weights):
+        """
+        Halla a partir de los pesos, los intervalos de credibilidad
+        """
+        
+        alpha = (1.0 - self.level) / 2.0
+
+        intervals = np.zeros((self.state_dim, 2))
+
+        for d in range(self.state_dim):
+
+            # Ordenar partículas según la dimensión d
+            idx = np.argsort(self.particles[:, d])
+
+            x = self.particles[idx, d]
+            w = weights[idx]
+
+            # CDF ponderada
+            cdf = np.cumsum(w)
+
+            # Cuantiles
+            i_low = np.searchsorted(cdf, alpha, side="left")
+            i_sup = np.searchsorted(cdf, 1-alpha, side="left")
+
+            intervals[d, 0] = x[i_low]
+            intervals[d, 1] = x[i_sup]
+
+        return intervals
+    
+    
+    def effective_sample_size(self, weights):
         """
         Calcula el número efectivo de la muestra según los pesos de las partículas: $1 / \sum_i (w^{(i)^2}$
         """
-
-        weights = self.get_weights()
 
         return 1.0/np.sum(weights**2)
     
     # -----------------
     # Resampling
     # -----------------
-    def resample(self):
+    def resample(self, weights):
         """
         Ejecuta un remuestreo multinomial
 
         TODO: generalizarlo para incluir otros tipos de remuestreo
         """
 
-        w = self.get_weights()
-
-        idx = np.random.choice(self.N, size = self.N, p = w)
+        idx = np.random.choice(self.N, size = self.N, p = weights)
 
         self.particles = self.particles[idx]
 
         self.log_weights = np.full(self.N, -np.log(self.N))
+
+        self.resample_times += 1
     
     # ---------------------------
     # One filter step
@@ -121,23 +176,39 @@ class ParticleFilter(ABC):
             -observations: array con las observaciones del sistema
             -resample_threshold: condición para realizar el remuestreo
         """
+        start_time = time.perf_counter()
+
+        self.resample_times = 0
+        self.log_norms = []
 
         T = len(observations)
 
         estimates = np.empty((T, self.state_dim))
         weights_history = np.empty((T, self.N))
+        intervals_history = np.empty((T, self.state_dim, 2))
+
         #particles_history = np.empty((T, self.N, self.state_dim))
 
         for k,y in enumerate(observations):
-            estimates[k] = self.step(y, resample_threshold=resample_threshold)
-
-            weights_history[k] = self.get_weights()
+            
+            estimates[k], weights_history[k], intervals_history[k] = self.step(y, resample_threshold=resample_threshold)
 
             #partciles_history[k] = self.particles
 
+
+        end_time = time.perf_counter()
+
+        time_execution = end_time - start_time
+
         return {
             "estimates": estimates,
-            "weights": weights_history,
+            "normalized_weights": weights_history,
+            "intervals": intervals_history,
+            "number_particles": self.N,
+            "number_resamples": self.resample_times,
+            "execution_time": time_execution,
+            "log_likelihoods": self.log_norms,
+            "log_likelihood": self.log_likelihood()
             #"particles": particles_history
             }
     
@@ -154,16 +225,10 @@ class BootstrapParticleFilter(ParticleFilter):
         Paso de predicción: para cada partícula calcula $x_t = f(x_{t-1}) + w_t$ con $w_t$ el ruido de la función estado
         """
 
-        #Calculo del ruido de prediccion
-        predicted_noise = np.random.multivariate_normal(
-            mean = np.zeros(self.state_dim),
-            cov = self.Q,
-            size = self.N
-        )
-
-        predicted =np.array([as_vector(self.f(x)) for x in self.particles])
-
-        self.particles = predicted + predicted_noise
+        self.particles = np.array([
+            self.transition_model.sample(x)
+            for x in self.particles
+        ])
 
     #----------------------
     # Paso de actualizacion
@@ -176,26 +241,21 @@ class BootstrapParticleFilter(ParticleFilter):
             -observation: vector con la observación $y_t$
         """
         
-        #Convertir observacion en un array
-        observation = as_vector(observation)
-
-        if observation.shape[0] != self.obs_dim: 
-            raise ValueError( f"La observación tiene dimensión " f"{observation.shape[0]}, " f"pero se esperaba {self.obs_dim}" )
-
-
         log_likelihoods = np.array([
-            multivariate_normal.logpdf(
+            self.observation_model.loglikelihood(
                 observation,
-                mean=as_vector(self.h(x)),
-                cov=self.R
+                x
             )
             for x in self.particles
         ])
 
         self.log_weights += log_likelihoods
 
+        log_norm = logsumexp(self.log_weights)
+        self.log_norms.append(log_norm)
+
         #Normalizacion en espacio log
-        self.log_weights -= logsumexp(self.log_weights)
+        self.log_weights -= log_norm
 
     #----------------------
     # Paso de itereación
@@ -213,15 +273,18 @@ class BootstrapParticleFilter(ParticleFilter):
         self.predict()
         self.update(observation)
 
-        estimate = self.estimate()
+        weights = self.get_weights()
+        intervals = self.credible_interval(weights)
 
-        if resample_threshold is None:
-            return estimate
+        estimate = self.estimate(weights)
 
-        if self.effective_sample_size() < resample_threshold:
-            self.resample()
+        if (
+            resample_threshold is not None
+            and self.effective_sample_size(weights) < resample_threshold
+        ):
+            self.resample(weights)
 
-        return estimate
+        return estimate, weights, intervals
 
 
 class AuxiliaryParticleFilter(ParticleFilter):
@@ -235,7 +298,10 @@ class AuxiliaryParticleFilter(ParticleFilter):
         Predicción del sigiente estado (sin ruido) $\hat{x}_t = f(x_{t-1})$
         """
 
-        return np.array([ as_vector(self.f(x)) for x in self.particles ])
+        return np.array([
+            self.transition_model.predict(x)
+            for x in self.particles
+        ])
     
 
     def auxiliary_weights(self, y, means):
@@ -250,19 +316,18 @@ class AuxiliaryParticleFilter(ParticleFilter):
         """
 
         log_aux = np.array([
-            multivariate_normal.logpdf(
-                y,
-                mean=as_vector(self.h(m)),
-                cov=self.R
-            )
+            self.observation_model.loglikelihood(y, m)
             for m in means
         ])
 
+
         log_aux += self.log_weights
 
-        log_aux -= logsumexp(log_aux)
+        log_aux_norm = logsumexp(log_aux)
 
-        return np.exp(log_aux)
+        log_aux -= log_aux_norm
+
+        return np.exp(log_aux), log_aux_norm
     
 
     def select_ancestors(self, aux_weights, means):
@@ -297,18 +362,10 @@ class AuxiliaryParticleFilter(ParticleFilter):
             -x_prev: array con las partículas 'ancestro' seleccionadas
         """
 
-        noise = np.random.multivariate_normal(
-            np.zeros(self.state_dim),
-            self.Q,
-            size=self.N
-        )
-
-        propagated = np.array([
-            as_vector(self.f(x))
+        self.particles = np.array([
+            self.transition_model.sample(x)
             for x in x_prev
         ])
-
-        self.particles = propagated + noise
 
     
     def weights_correction(self, y, means):
@@ -322,27 +379,22 @@ class AuxiliaryParticleFilter(ParticleFilter):
         """
 
         log_true = np.array([
-            multivariate_normal.logpdf(
-                y,
-                mean=as_vector(self.h(x)),
-                cov=self.R
-            )
+            self.observation_model.loglikelihood(y, x)
             for x in self.particles
         ])
 
         log_lookahead = np.array([
-            multivariate_normal.logpdf(
-                y,
-                mean=as_vector(self.h(m)),
-                cov=self.R
-            )
+            self.observation_model.loglikelihood(y, m)
             for m in means
         ])
 
         self.log_weights = ( log_true - log_lookahead)
 
-        self.log_weights -= logsumexp(self.log_weights)
+        log_norm = logsumexp(self.log_weights)
 
+        self.log_weights -= log_norm
+
+        return log_norm
 
     def step(self, observation, resample_threshold=None):
         """
@@ -356,23 +408,28 @@ class AuxiliaryParticleFilter(ParticleFilter):
 
         means = self.expected_state()
         
-        aux_weights = self.auxiliary_weights(observation, means)
+        aux_weights, log_aux_norm = self.auxiliary_weights(observation, means)
 
         x_prev, means_prev = self.select_ancestors(aux_weights, means)
 
         self.propagation(x_prev)
 
-        self.weights_correction(observation, means_prev)
+        log_norm = self.weights_correction(observation, means_prev)
 
-        estimate = self.estimate()
+        self.log_norms.append(log_aux_norm + log_norm - np.log(self.N))
 
-        if resample_threshold is None:
-            return estimate
+        weights = self.get_weights()
+        intervals = self.credible_interval(weights)
 
-        if self.effective_sample_size() < resample_threshold:
-            self.resample()
+        estimate = self.estimate(weights)
 
-        return estimate
+        if (
+            resample_threshold is not None
+            and self.effective_sample_size(weights) < resample_threshold
+        ):
+            self.resample(weights)
+
+        return estimate, weights, intervals
 
 
         
