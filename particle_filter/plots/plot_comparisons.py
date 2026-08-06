@@ -1,7 +1,7 @@
 import matplotlib.pyplot as plt
 
             
-def plot_comparisons(results, performance_metric):
+def plot_comparisons(results, control_metric, performance_metric, show_errorbars=False):
 
     """
     Obtiene gráficas que comparan el rendimiento de los diferentes filtros de partículas según sus parámetros.
@@ -16,6 +16,7 @@ def plot_comparisons(results, performance_metric):
                 "Auxiliary PF Resample": { "number_particles": (array ints), "execution_time": (array float), "log_likelihood": (array float), "RMSE":  (array float) }
             }
 
+        -control_metric (string) String que especifica el parámetro de control para comparar
         -performance_metric (string) String que especifica la métrica a representar
     """
 
@@ -33,41 +34,31 @@ def plot_comparisons(results, performance_metric):
         "Auxiliary PF No-Resample": "--"
     }
 
-    performance = {
-        "Tiempos de ejecucion": "execution_time",
-        "Log-verosimilitud estimada": "log_likelihood",
-        "RMSE": "RMSE"
-    }
-
     fig, ax = plt.subplots(figsize=(8,6))
 
     ax.grid(True, alpha=0.3)
 
     for filtering_name, results_info in results.items():
-        
-        N_particles = results_info["number_particles"]
-        
-        if performance_metric not in performance:
-            raise ValueError(
-                f"Metric {performance_metric} no existe"
-                f"Opciones: {list(performance.keys())}"
-                )
-        
-        metric_key = performance[performance_metric]
-        metric = results_info[metric_key]
+
+        control = results_info[control_metric]
+        metric = results_info[performance_metric]
 
         color = colors.get(filtering_name, None)
         style = styles.get(filtering_name, None)
 
-        ax.plot(N_particles, metric, color=color, ls=style, label=filtering_name)
-        ax.scatter(N_particles, metric, s=10, color="black")
+        ax.plot(control, metric, color=color, ls=style, label=filtering_name)
+        ax.scatter(control, metric, s=10, color="black")
+
+        if show_errorbars:
+            errorbar = results_info[f"{performance_metric}_errorbars"]
+            ax.errorbar(control, metric, yerr = errorbar, fmt="o", capsize=4.0, color=color, linestyle='--')
 
 
-    ax.set_xlabel("Número de partículas")
+    ax.set_xlabel(control_metric)
     ax.set_ylabel(performance_metric)
     ax.set_title(f"Comparación de algoritmos de filtrado ({performance_metric})")
     ax.legend()
 
     fig.tight_layout()
 
-    plt.show()
+    return fig, ax

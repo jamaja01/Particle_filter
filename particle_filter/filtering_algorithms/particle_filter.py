@@ -3,6 +3,7 @@ import time
 from scipy.special import logsumexp
 from abc import ABC, abstractmethod
 from particle_filter.utilities import as_covariance_matrix, as_vector
+from particle_filter.filtering_algorithms.resampling_methods import RESAMPLERS
 
 
 class ParticleFilter(ABC):
@@ -27,7 +28,7 @@ class ParticleFilter(ABC):
         -log_likelihood (float): log-verosimilitud estimada
     """
 
-    def __init__(self, N, transition_model, observation_model, level=0.95):
+    def __init__(self, N, transition_model, observation_model, resample_method = "systematic", level=0.95):
         
         self.N = int(N)
 
@@ -36,6 +37,7 @@ class ParticleFilter(ABC):
 
         self.state_dim = transition_model.state_dim
 
+        self.resample_method = resample_method
         self.level = level
 
         self.particles = np.zeros((self.N, self.state_dim))
@@ -145,15 +147,14 @@ class ParticleFilter(ABC):
     # -----------------
     def resample(self, weights):
         """
-        Ejecuta un remuestreo multinomial
+        Ejecuta el remuestreo según el método indicado en el la inicialización
 
         TODO: generalizarlo para incluir otros tipos de remuestreo
         """
 
-        idx = np.random.choice(self.N, size = self.N, p = weights)
+        idx = RESAMPLERS[self.resample_method](weights)
 
         self.particles = self.particles[idx]
-
         self.log_weights = np.full(self.N, -np.log(self.N))
 
         self.resample_times += 1

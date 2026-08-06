@@ -24,36 +24,42 @@ class ObservationModel(ABC):
         pass
 
 
-class AdditiveObservationModel(ObservationModel):
-    """
-    El modelo de observación es aditivo
-    y = h(x) + v
-    """
+class GeneralObservationModel(ObservationModel):
 
-    def __init__(self, h, noise):
+    def __init__(self, observation, noise, loglikelihood=None):
+
         super().__init__(noise.dim)
-        self.h = h
+        
+        self.observation = observation
         self.noise = noise
+        self._loglikelihood = loglikelihood
 
 
     def sample(self, x):
-        """
-        Calcula y = h(x) + v
-        """
-        return self.h(x) + self.noise.sample()
+        v = self.noise.sample()
+        return self.observation(x, v)
 
 
     def loglikelihood(self, y, x):
-        """
-        Calcula log-verosimlitud de la siguiente manera:
-        1. Calcula la observación esperada: h(x)
-        2. Calcula el error: v = y - h(x)
-        3. Calcula la probabilidad de el ruido necesario para obtener la obsevarción
-           (si el ruido es pequeño, la observación es muy probable)
-        """
-        return self.noise.logpdf(
-            y - self.h(x)
-        )    
+
+        if self._loglikelihood is None:
+            raise NotImplementedError
+
+        return self._loglikelihood(y, x)
     
 
-#TODO: NonAdditiveObservationModel
+class AdditiveObservationModel(GeneralObservationModel):
+
+    def __init__(self, h, noise):
+
+        def observation(x, v):
+            return h(x) + v
+
+        def loglikelihood(y, x):
+            return noise.logpdf(y-h(x))
+
+        super().__init__(
+            observation,
+            noise,
+            loglikelihood
+        )

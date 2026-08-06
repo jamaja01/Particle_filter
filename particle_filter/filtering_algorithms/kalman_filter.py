@@ -55,6 +55,18 @@ class KalmanFilter:
         # Covarianza de la innovacion
         S = self.H @ self.P @ self.H.T + self.R
 
+        # Log-verosimilitud de la observacion
+        sign, logdet = np.linalg.slogdet(S)
+
+        if sign <= 0:
+            raise ValueError("Matriz S no es definida positiva")
+
+        loglik = -0.5 * (
+            len(np.atleast_1d(observation)) * np.log(2 * np.pi)
+            + logdet
+            + y.T @ np.linalg.solve(S,y)
+        )
+
         # Ganancia de kalman #
         # K = P * H^T * S^-1 => K^T = S^-1 * (P *H^T)^T => S * K^T = (P*H^T)^T 
         PHt = self.P @ self.H.T
@@ -69,7 +81,7 @@ class KalmanFilter:
         J = I - K @ self.H
         self.P = J @ self.P @ J.T + K @ self.R @ K.T
 
-        return self.x, self.P
+        return self.x, self.P, loglik
     
 
     def interval_confidence(self):
@@ -85,11 +97,11 @@ class KalmanFilter:
     def step(self, observation):
 
         self.predict()
-        estimate, _ = self.update(observation)
+        estimate, _, loglik = self.update(observation)
 
         confidence_intervals = self.interval_confidence()
 
-        return estimate, confidence_intervals
+        return estimate, confidence_intervals, loglik
 
 
     def run_filter(self, observations):
@@ -98,14 +110,16 @@ class KalmanFilter:
 
         estimates = np.empty((T, self.state_dim))
         intervals = np.empty((T, self.state_dim, 2))
+        loglikelihoods = np.empty(T)
 
         for k,y in enumerate(observations):
             
-            estimates[k], intervals[k] = self.step(y)
+            estimates[k], intervals[k], loglikelihoods[k] = self.step(y)
 
         return {
             "estimates": estimates,
-            "intervals": intervals
+            "intervals": intervals,
+            "loglikelihoods": loglikelihoods
             }
 
 

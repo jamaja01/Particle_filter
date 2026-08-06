@@ -13,7 +13,7 @@ class TransitionModel(ABC):
     @abstractmethod
     def sample(self, x):
         """
-        Dado el estado actual x, genera un posible estado futuro: x_t \simp(x_t \mid x_{t-1})
+        Dado el estado actual x, genera un posible estado futuro: x_t \sim  p(x_t \mid x_{t-1})
         """
         pass
 
@@ -35,58 +35,45 @@ class TransitionModel(ABC):
     """
 
 
-class AdditiveTransitionModel(TransitionModel):
-    """
-    Supone que el ruido se suma al resultado de una función determinista:
-    x_t = f(x_{t-1}) + w_t
-    """
+class GeneralTransitionModel(TransitionModel):
 
-    def __init__(self, f, noise):
-        """
-        -f (callable) Función de transición determinista
-        -noise (object NoiseModel) Ruido del proceso de transición
-        """
+    def __init__(self, transition, noise, mean=None):
+
         super().__init__(noise.dim)
-        self.f = f
+        
+        self.transition = transition
         self.noise = noise
-    
+        self.mean = mean
 
-    def predict(self, x):
-        """
-        E[x_t] = f(x)
-        """
-        return self.f(x)
     
-
     def sample(self, x):
-        """
-        Devuelve x_t = f(x) + w_t
-        """
-        return self.predict(x) + self.noise.sample()
-    
-
-
-class NonAdditiveTransitionModel(TransitionModel):
-    """
-    El ruido no se suma:
-    x_t = f(x_{t-1}, w_t)
-    """
-
-    def __init__(self, f, noise):
-        super().__init__(noise.dim)
-        self.f = f
-        self.noise = noise
-
-
-    def predict(self, x):
-        raise NotImplementedError(
-            "No siempre existe E[f(x,w)]"
-        )
-    
-
-    def sample(self, x):
-        """
-        Calcula x_t = f(x, w)
-        """
         w = self.noise.sample()
-        return self.f(x, w)
+
+        return self.transition(x, w)
+    
+
+    def predict(self, x):
+
+        if self.mean is None:
+            raise NotImplementedError(
+                "Analytical conditional mean not available."
+            )
+        
+        return self.mean(x)
+    
+
+
+class AdditiveTransitionModel(GeneralTransitionModel):
+
+    def __init__(self, f, noise):
+        
+        def transition(x, w):
+            return f(x) + w
+        
+        super().__init__(
+            transition=transition,
+            noise=noise,
+            mean=f
+        )
+
+        self.f = f
