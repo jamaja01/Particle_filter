@@ -1,5 +1,5 @@
 import numpy as np
-
+import time
 
 class KalmanFilter:
     """
@@ -105,6 +105,8 @@ class KalmanFilter:
 
 
     def run_filter(self, observations):
+
+        start_time = time.perf_counter()
         
         T = len(observations)
 
@@ -116,10 +118,16 @@ class KalmanFilter:
             
             estimates[k], intervals[k], loglikelihoods[k] = self.step(y)
 
+        end_time = time.perf_counter()
+
+        time_execution = end_time - start_time
+
         return {
             "estimates": estimates,
             "intervals": intervals,
-            "loglikelihoods": loglikelihoods
+            "loglikelihoods": loglikelihoods,
+            "loglikelihood": np.sum(loglikelihoods),
+            "execution_time": time_execution
             }
 
 

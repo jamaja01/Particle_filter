@@ -1,0 +1,35 @@
+"results_expi" tiene solo Bootstrap con n_simulations=1
+
+-results_exp_1_1: n_simulations=10 BPF loc=0.5, scale=1.5 (Uniform Noise), T=100
+-results_exp_1_2: n_simulations=10 BPF loc=0.5, scale=3.5 (Uniform Noise), T=100
+-results_exp_1_3: n_simulations=10 BPF loc=0.5, scale=1.5 (Uniform Noise), T=500
+-results_exp_1_4: n_simulations=10 BPF loc=0.5, scale=3.5 (Uniform Noise), T=500
+
+
+-results_exp_2_3: n_simulations=10 BPF y APF con lambda=0.5 (ExponentialNoise), T=100 (caso concreto que APF no ha explotado)
+-results_exp_2_4: n_simulations=10 BPF y APF con lambda=0.5 (ExponentialNoise), T=500
+
+-results_exp_3_2: n_simulations=10 BPF y APF con (2,1) (GammaNoise), T=100 (caso concreto que APF no ha explotado)
+-results_exp_3_3: n_simulations=10 BPF con (2,2) (GammaNoise), T=100 
+-results_exp_3_4: n_simulations=10 BPF con (2,1) (GammaNoise), T=500 
+-results_exp_3_5: n_simulations=10 BPF con (2,2) (GammaNoise), T=500 
+
+-results_exp_4_1: n_simulations=1 BPF con GaussianNoise(R=0.5), T=100
+-results_exp_4_2: n_simulations=1 BPF con GaussianNoise(R=0.5), T=500
+
+-results_exp_4_3: n_simulations=1 BPF con GammaNoise(2,2), T=100
+-results_exp_4_4: n_simulations=1 BPF con GammaNoise(2,2), T=500
+-results_exp_4_5: n_simulations=1 BPF con ExponentialNoise(0.5), T=100
+-results_exp_4_6: n_simulations=1 BPF con ExponentialNoise(0.5), T=500
+-results_exp_4_7: n_simulations=1 BPF con UniformNoise(0.5, 3.5), T=100
+-results_exp_4_8: n_simulations=1 BPF con UniformNoise(0.5, 3.5), T=500
+-results_exp_4_9: n_simulations=1 BPF con GammaNoise(2,2), T=500 (inicializacion regimen random)
+
+-results_exp_4_10: n_simulations=1 BPF con GammaNoise(2,2), T=500 (inicializacion regimen random) (con Q todos 1.0, antes Parado tenia 0.5)
+-results_exp_4_11: n_simulations=1 BPF con ExponentialNoise(0.5), T=500 (inicializacion regimen random) (con Q todos 1.0, antes Parado tenia 0.5)
+-results_exp_4_12: n_simulations=1 BPF con UniformNoise(0.5, 3.0), T=500 (inicializacion regimen random) (con Q todos 1.0, antes Parado tenia 0.5)
+ 
+
+
+
+

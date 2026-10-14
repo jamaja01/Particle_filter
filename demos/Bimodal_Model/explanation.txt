@@ -1,0 +1,32 @@
+Q=0.1; R=0.25
+-exp1: bpf.N/2
+-exp2: 0.25 * bpf.N
+-exp3: bpf.N/2, apf.N/2
+-exp4: bpf.N/2, apf.N/2 con N=50000
+-exp5: bpf.N/2, apf.N/2 con N=1000 
+-exp6: bpf.N/2 con N=1000 (Sys, Mult, Res) x5 simulaciones x5 filtrados 
+-exp7: bpf.N/2 con N=1000 (Sys, Mult, Res) x5 simulaciones x5 filtrados con MCMC move
+-exp8: apf.N/2 con N=1000 (Sys, Mult, Res) x5 simulaciones x5 filtrados 
+-exp9: apf.N/2 con N=1000 (Sys, Mult, Res) x5 simulaciones x5 filtrados con MCMC move
+-exp10: bpf.N/2 con N=1000 (Sys, Mult, Res) x5 simulaciones x1 filtrados Q=0.1, R = 0.25 
+-exp11: apf.N/2 con N=1000 (Sys, Mult, Res) x5 simulaciones x1 filtrados Q=0.1, R = 0.25
+
+R=Q=1.0
+-exp12: bpf.N/2 con N=1000 (Sys, Mult, Res) x5 simulaciones x1 filtrados R=Q=1.0
+-exp13: apf.N/2 con N=1000 (Sys, Mult, Res) x5 simulaciones x1 filtrados R=Q=1.0 
+
+-exp14: bpf.N/2 con N=50 (Sys, Mult, Res) x10 simulaciones x1 filtrados R=Q=1.0 
+-exp15: bpf.N/2 con N=100 (Sys, Mult, Res) x10 simulaciones x1 filtrados R=Q=1.0 
+-exp16: bpf.N/2 con N=500 (Sys, Mult, Res) x10 simulaciones x1 filtrados R=Q=1.0
+-exp17: bpf.N/2 con N=500 (Sys, Mult, Res) x10 simulaciones x1 filtrados R=Q=1.0
+
+-exp18: apf.N/2 con N=50 (Sys, Mult, Res) x10 simulaciones x1 filtrados R=Q=1.0
+-exp19: apf.N/2 con N=100 (Sys, Mult, Res) x10 simulaciones x1 filtrados R=Q=1.0
+-exp20: apf.N/2 con N=500 (Sys, Mult, Res) x10 simulaciones x1 filtrados R=Q=1.0
+-exp21: apf.N/2 con N=1000 (Sys, Mult, Res) x10 simulaciones x1 filtrados R=Q=1.0
+
+-exp22: bpf.N/2 con N=5000 (Sys, Mult, Res) x10 simulaciones x1 filtrados R=Q=1.0
+-exp23: apf.N/2 con N=5000 (Sys, Mult, Res) x10 simulaciones x1 filtrados R=Q=1.0
+
+-exp24: bpf.N/2 con N=5000 (Sys, Mult, Res) x10 simulaciones x1 filtrados R=Q=1.0 con MCMC_cov=1.0
+-exp25: apf.N/2 con N=5000 (Sys, Mult, Res) x10 simulaciones x1 filtrados R=Q=1.0 con mcmc_cov=1.0

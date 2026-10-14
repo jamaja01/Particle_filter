@@ -1,0 +1,42 @@
+-results_exp1: caso 1 con n_simulation=1
+-results_exp1_0: caso 1 (NO ADITIVO) con n_simulation=10, Q=0.5, R=1.0
+-results_exp1_1: caso 1 con n_simulation=10, Q=0.5, R=1.0
+-results_exp1_2: caso 1 con n_simulation=10, Q=1.0, R=1.0
+-results_exp1_3: caso 1 con n_simulation=10, Q=0.5, R=0.5
+-results_exp1_4: caso 1 con n_simulation=10, Q=1.0, R=0.5
+
+-results_exp2: caso 2 con n_simulation=1
+-results_exp2_2: caso 2 con n_simulation=10
+-results_exp2_3: caso 2 con df=1 con n_simulation=10
+-results_exp2_4: caso 2 con df=2 con n_simulation=10
+-results_exp2_5: caso 2 con df=2, Q=1,R=1 con n_simulation=10
+-results_exp2_6: caso 2 con df=2, Q=2,R=1 con n_simulation=10
+-results_exp2_7: caso 2 con df=2, Q=1,R=2 con n_simulation=10
+-results_exp2_8: caso 2 con df=2, Q=2,R=2 con n_simulation=10
+
+
+-results_exp3: caso 3 con n_simulation=1
+-results_exp3_3: caso 3 con n_simulation=10
+
+-results_exp4: caso 4 con n_simulation = 1
+-results_exp4_1: caso 4 con n_simulation = 10
+
+-results_exp5: caso 5 con sigma=0.5, R=0.5
+-results_exp5_2: caso 5 con sigma=1.0, R=0.5
+-results_exp5_3: caso 5 con LogN ~ (0, 0.5^2), R = 0.5
+-results_exp5_3: caso 5 con LogN ~ (0, 0.5^2), R = 0.5, 10 simulaciones
+
+-results_exp6_1: caso 6 con Q=0.1, R=0.5 matriz = [ [0.95, 0.05], [0.1, 0.9] ] con BootstrapParticleFilterRegime
+-results_exp6_2: caso 6 con Q=0.1, R=0.5 matriz = [ [0.95, 0.05], [0.1, 0.9] ] con AuxiliaryParticleFilterRegime
+-results_exp6_3: caso 6 con Q=0.1, R=0.5 matriz = [ [0.95, 0.05], [0.1, 0.9] ] con BootstrapParticleFilterRegime, AuxiliaryParticleFilterRegime
+-results_exp6_4: caso 6 con Q=0.1, R=0.5 matriz = [ [0.95, 0.05], [0.1, 0.9] ] con BootstrapParticleFilterRegime, AuxiliaryParticleFilterRegime
+-results_exp6_5: caso 6 con Q=0.1, R=0.5 matriz = [ [0.95, 0.05], [0.1, 0.9] ] con BootstrapParticleFilterRegime, AuxiliaryParticleFilterRegime (T=1000)
+-results_exp6_6: caso 6 con Q=0.1, R=0.5 matriz = [ [0.6, 0.4], [0.3, 0.7] ] con BootstrapParticleFilterRegime, AuxiliaryParticleFilterRegime 
+-results_exp6_7: caso 6 con Q=0.1, R=0.5 matriz = [ [0.6, 0.4], [0.3, 0.7] ] con BootstrapParticleFilterRegime, AuxiliaryParticleFilterRegime (T=1000)
+-results_exp6_8: caso 6 con Q=1.0, R=0.5 matriz = [ [0.6, 0.4], [0.3, 0.7] ] con BootstrapParticleFilterRegime, AuxiliaryParticleFilterRegime (T=1000)
+-results_exp6_9: caso 6 con Q=1.0, R=0.5 matriz = [ [0.95, 0.05], [0.1, 0.9] ] con BootstrapParticleFilterRegime, AuxiliaryParticleFilterRegime (T=1000)
+-results_exp6_10: caso 6 con Q=1.0, R=0.5 matriz = [ [0.5, 0.5], [0.5, 0.5] ] con BootstrapParticleFilterRegime, AuxiliaryParticleFilterRegime (T=1000)
+
+-results_exp6_11: caso 6 con Q=1.0, R=0.5 matriz = [ [0.6, 0.4], [0.3, 0.7] ] con BootstrapParticleFilterRegime, AuxiliaryParticleFilterRegime (T=1000) con g_2 ruido student (df=2, shape=2)
+-results_exp6_12: caso 6 con Q=1.0, R=0.5 matriz = [ [0.5, 0.5], [0.5, 0.5] ] con BootstrapParticleFilterRegime, AuxiliaryParticleFilterRegime (T=1000) con g_2 ruido student (df=2, shape=2)
+-results_exp6_13: caso 6 con Q=1.0, R=0.5 matriz = [ [0.95, 0.05], [0.1, 0.9] ] con BootstrapParticleFilterRegime, AuxiliaryParticleFilterRegime (T=1000) con g_2 ruido student (df=2, shape=2)

@@ -46,3 +46,31 @@ def Interval_cover(x_true, confidence_intervals):
     joint_inside =np.all(inside, axis=1)
 
     return 100 * np.mean(joint_inside)
+
+
+def unique_particles(results):
+
+    n_uniques = []
+
+    n_uniques.append(np.array([
+        np.unique(results["particles_post_resampling"][t], axis=0).shape[0]
+        for t in range(results["particles_post_resampling"].shape[0])
+    ]))
+
+    return np.array(n_uniques)
+
+
+def RMSE_time(x_true, x_est):
+
+    error = x_est - x_true
+
+    # RMSE independiente en cada instante
+    rmse_t = np.sqrt(np.mean(error**2, axis=1))
+
+    # RMSE acumulado hasta cada instante
+    mse_t = np.mean(error**2, axis=1)
+    rmse_acumulado = np.sqrt(
+        np.cumsum(mse_t) / np.arange(1, len(x_est) + 1)
+        )
+
+    return rmse_t, rmse_acumulado

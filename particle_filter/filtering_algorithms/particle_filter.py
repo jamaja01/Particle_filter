@@ -15,20 +15,27 @@ class ParticleFilter(ABC):
         -N (int) Número de partículas
         -transition_model (class TransitionModel) Modelo de transicion (incluido el ruido)
         -observation_model (class ObservationModel) Modelo de observación (incluido el ruido)
-        -level(float): valor para la construcción de los intervalos de credibilidad
-
+        -resample_method (string) Indica el método de remuestreo que se utilizará
+        -level(float) Valor para la construcción de los intervalos de credibilidad
+        -transition_smoothness (float) Discretización del tiempo para la transición
+        -observation_smoothness (float) Discretización del tiempo para la observación 
+        
     Return: un diccionario con
         -estimates (ndarray (T, state_dim)) Estados ocultos estimados en cada tiempo
-        -normalized_weights (ndarray (T, N_particles)): array con los pesos normalizados en cada tiempo
+        -normalized_weights (ndarray (T, N_particles)): array con los pesos normalizados en cada tiempo (antes de un posible remuestreo)
         -intervals (ndarray (T, state_dim, 2)): array con los intervalos de credibilidad en cada tiempo
         -number_particles (int): numero de partículas
         -number_resamples (int): numero de veces en las que se ha realizado re-muestreo
+        -resample_time_indexes (array): tiempos en los que se han realizado el paso de remuestreo
+        -resample_particles_indexes (array): partículas seleccionadas en el remuestreo 
         -execution_time (float): tiempo en segundos de ejecucion del filtrado
         -log_likelihoods (array (T)): array con las log-verosimilitudes estimadas
         -log_likelihood (float): log-verosimilitud estimada
+        -particles_pre_resampling (ndarray (T, N_particles, state_dim)) Partículas antes del remuestreo
+        -particles_post_resampling (ndarray (T, N_particles, state_dim)) Partículas después del remuestreo
     """
 
-    def __init__(self, N, transition_model, observation_model, resample_method = "systematic", level=0.95):
+    def __init__(self, N, transition_model, observation_model, resample_method = "systematic", level=0.95, transition_smoothness = 1.0, observation_smoothness = 1.0):
         
         self.N = int(N)
 
@@ -40,10 +47,25 @@ class ParticleFilter(ABC):
         self.resample_method = resample_method
         self.level = level
 
+        self.transition_smoothness = transition_smoothness
+        self.observation_smoothness = observation_smoothness
+
+        if transition_smoothness > observation_smoothness:
+            raise ValueError("transition_smoothnes debe ser menor o igual que observation_smoothness")
+
+        ratio = observation_smoothness / transition_smoothness
+
+        if not np.isclose(ratio, round(ratio)):
+            raise ValueError("observation_smoothness / transition_smoothness debe ser un número entero")
+
+        self.transition_steps = int(ratio)
+
         self.particles = np.zeros((self.N, self.state_dim))
         self.log_weights = np.zeros(self.N) 
 
         self.resample_times = 0
+        self.resample_time_indexes = []
+        self.resample_particles_indexes = []
         self.log_norms = []
 
     #----------------
@@ -70,12 +92,14 @@ class ParticleFilter(ABC):
     #---------
     def reset(self, mean, cov):
         """
-        "Resetea" el filtro de partículas para inciar con otro estado sin tener que instanciar
+        "Resetea" el filtro de partículas para iniciar con otro estado sin tener que instanciar
         de nuevo el objeto 
         """
         self.initialize(mean, cov)
         self.resample_times = 0
         self.log_norms = []
+        self.resample_time_indexes = []
+        self.resample_particles_indexes = []
 
 
     # -------------
@@ -141,7 +165,7 @@ class ParticleFilter(ABC):
         """
 
         return 1.0/np.sum(weights**2)
-    
+
     # -----------------
     # Resampling
     # -----------------
@@ -158,6 +182,62 @@ class ParticleFilter(ABC):
         self.log_weights = np.full(self.N, -np.log(self.N))
 
         self.resample_times += 1
+
+        return idx
+
+
+    #------------
+    # MCMC move
+    #------------
+    def Random_Walk_Metropolis(self, observation, ancestors, proposal_cov, n_steps):
+        """
+        Random Walk Metropolis para rejuvenecer las partículas.
+
+        pi_i(x) \approx p(y_t | x) p(x_{t-1}^{(i)})
+
+        La propuesta es:
+            x' = x + eps
+            eps ~ N(0, proposal_cov)
+        """
+
+        if self.transition_model.logpdf is None:
+            raise NotImplementedError(
+                "Transition logpdf not implemented."
+            )
+
+        proposal_cov = as_covariance_matrix(proposal_cov)
+
+        chol = np.linalg.cholesky(proposal_cov)
+
+        for i in range(self.N):
+
+            x = self.particles[i]
+            x_prev = ancestors[i]
+
+            # Log densidad de la distribución objetivo actual
+            current_log_target = (
+                self.observation_model.loglikelihood(observation, x) +
+                self.transition_model.logpdf(x, x_prev)
+            )
+
+            for _ in range(n_steps):
+
+                # Random Walk proposal
+                epsilon = chol @ np.random.randn(self.state_dim)
+                x_proposed = x + epsilon
+
+                proposed_log_target = (
+                    self.observation_model.loglikelihood(observation, x_proposed) +
+                    self.transition_model.logpdf(x_proposed, x_prev)
+                )
+
+                log_alpha = (proposed_log_target - current_log_target)
+
+                if np.log(np.random.rand() < min(0.0, log_alpha)):
+                    x = x_proposed
+
+            self.particles[i] = x
+
     
     # ---------------------------
     # One filter step
@@ -169,7 +249,7 @@ class ParticleFilter(ABC):
     # -----------------------
     # Run over sequence
     # -----------------------
-    def run_filter(self, observations, resample_threshold=None):
+    def run_filter(self, observations, resample_threshold=None, mcmc_steps=0, mcmc_cov=None):
         """
         A partir de un array que contiene las observaciones de un sistema, ejecuta la función definida 'step' (definida según el tipo de filtro).
 
@@ -180,6 +260,7 @@ class ParticleFilter(ABC):
         start_time = time.perf_counter()
 
         self.resample_times = 0
+        self.resample_time_indexes = []
         self.log_norms = []
 
         T = len(observations)
@@ -187,14 +268,13 @@ class ParticleFilter(ABC):
         estimates = np.empty((T, self.state_dim))
         weights_history = np.empty((T, self.N))
         intervals_history = np.empty((T, self.state_dim, 2))
-
-        #particles_history = np.empty((T, self.N, self.state_dim))
+        particles_history_pre_resampling = np.empty((T, self.N, self.state_dim))
+        particles_history_post_resampling = np.empty((T, self.N, self.state_dim))
 
         for k,y in enumerate(observations):
             
-            estimates[k], weights_history[k], intervals_history[k] = self.step(y, resample_threshold=resample_threshold)
-
-            #partciles_history[k] = self.particles
+            estimates[k], weights_history[k], intervals_history[k], particles_history_pre_resampling[k], particles_history_post_resampling[k] = \
+                self.step(y, resample_threshold=resample_threshold, time_index=k, mcmc_steps=mcmc_steps, mcmc_cov=mcmc_cov)
 
 
         end_time = time.perf_counter()
@@ -207,17 +287,25 @@ class ParticleFilter(ABC):
             "intervals": intervals_history,
             "number_particles": self.N,
             "number_resamples": self.resample_times,
+            "resample_time_indexes": self.resample_time_indexes,
+            "resample_particles_indexes": self.resample_particles_indexes,
             "execution_time": time_execution,
             "log_likelihoods": self.log_norms,
-            "log_likelihood": self.log_likelihood()
-            #"particles": particles_history
+            "log_likelihood": self.log_likelihood(),
+            "particles_pre_resampling": particles_history_pre_resampling,
+            "particles_post_resampling": particles_history_post_resampling
             }
     
 
 class BootstrapParticleFilter(ParticleFilter):
     """
     Esta subclase realiza el Bootstrap Filter 
-    """    
+    """   
+
+    def __init__(self, N, transition_model, observation_model, resample_method="systematic", level=0.95, transition_smoothness=1.0, observation_smoothness=1.0):
+
+        super().__init__( N=N, transition_model=transition_model, observation_model=observation_model, resample_method=resample_method, level=level, transition_smoothness=transition_smoothness, observation_smoothness=observation_smoothness)
+
     #----------------------
     # Paso de predicción
     #----------------------
@@ -241,27 +329,31 @@ class BootstrapParticleFilter(ParticleFilter):
         Params:
             -observation: vector con la observación $y_t$
         """
-        
+
         log_likelihoods = np.array([
-            self.observation_model.loglikelihood(
-                observation,
-                x
-            )
+            self.observation_model.loglikelihood(observation, x)
             for x in self.particles
         ])
 
         self.log_weights += log_likelihoods
 
+        if np.isneginf(self.log_weights).all():
+            raise ValueError("Todos los log_weights son -inf")
+
         log_norm = logsumexp(self.log_weights)
+
+        if not np.isfinite(log_norm):
+            raise ValueError(f"log_norm es infinito: {log_norm}")
+
         self.log_norms.append(log_norm)
 
-        #Normalizacion en espacio log
+        # Normalización en espacio log
         self.log_weights -= log_norm
 
     #----------------------
     # Paso de itereación
     #----------------------    
-    def step(self, observation, resample_threshold=None):
+    def step(self, observation, resample_threshold=None, time_index=None, mcmc_steps=0, mcmc_cov=None):
         """
         Función que define una iteración para el Bootstrap Filter (predecir y actualizar) y devuelve el estado oculto estimado.
         Si se cumplen las condiciones, se realiza un re-muestreo
@@ -271,28 +363,220 @@ class BootstrapParticleFilter(ParticleFilter):
             -resample_threshold: condición de remuestreo
         """
 
-        self.predict()
+        # Predicción 
+        particles_previous = self.particles.copy()
+
+        # Evolucion del estado
+        for _ in range(self.transition_steps):
+            self.predict()
+
+        # Actualización
         self.update(observation)
 
         weights = self.get_weights()
-        intervals = self.credible_interval(weights)
 
+        # Estadística
+        intervals = self.credible_interval(weights)
         estimate = self.estimate(weights)
 
+        particles_output = self.particles.copy()
+        weights_output = weights.copy()
+
+        # Remuestreo
         if (
             resample_threshold is not None
             and self.effective_sample_size(weights) < resample_threshold
         ):
-            self.resample(weights)
+            idx = self.resample(weights)
+            self.resample_particles_indexes.append(np.asarray(idx))
 
-        return estimate, weights, intervals
+            # Guardar ancestros
+            ancestors = particles_previous[idx]
 
+            if time_index is not None:
+                self.resample_time_indexes.append(time_index)
+
+            # Rejuvenecimiento MCMC
+            if mcmc_steps > 0:
+
+                self.Random_Walk_Metropolis(observation=observation, ancestors=ancestors, proposal_cov=mcmc_cov, n_steps=mcmc_steps)
+
+        return estimate, weights_output, intervals, particles_output, self.particles
+
+
+class BootstrapParticleFilterRegime(BootstrapParticleFilter):
+
+    def __init__(self, N, transition_model, observation_model, resample_method="systematic", level=0.95, transition_smoothness=1.0, observation_smoothness=1.0):
+
+        super().__init__(N=N, transition_model=transition_model, observation_model=observation_model, resample_method=resample_method, level=level, transition_smoothness=transition_smoothness, observation_smoothness=observation_smoothness)
+
+        self.K = transition_model.K
+        self.regimes = np.zeros(self.N, dtype = int)
+
+
+    def initialize(self, mean, cov, initial_regime_probs=None):
+
+        super().initialize(mean, cov)
+
+        if initial_regime_probs is None:
+            initial_regime_probs = (self. transition_model.initial_regime_probs)
+
+        if initial_regime_probs is None:
+            initial_regime_probs = np.full(self.K, 1.0 / self.K)
+
+        initial_regime_probs = np.asarray(initial_regime_probs, dtype = float)
+
+        self.regimes = np.random.choice(self.K, size = self.N, p = initial_regime_probs)
+
+
+    def reset(self, mean, cov, initial_regime_probs=None):
+
+        self.initialize(mean, cov, initial_regime_probs)
+        self.resample_times = 0
+        self.log_norms = []
+        self.resample_time_indexes = []
+        self.resample_particles_indexes = []
+
+
+    def resample(self, weights):
+
+        idx = RESAMPLERS[self.resample_method](weights)
+
+        self.particles = self.particles[idx]
+        self.regimes = self.regimes[idx]
+
+        self.log_weights = np.full(self.N, -np.log(self.N))
+
+        self.resample_times += 1
+
+        return idx
+
+
+    def predict(self):
+
+        # Propagar regímenes
+        self.regimes = np.array([
+            self.transition_model.sample_regime(regime) 
+            for regime in self.regimes
+        ])
+
+        # Propagar partículas
+        self.particles = np.array([
+            self.transition_model.sample(self.regimes[i], x)
+            for i, x in enumerate(self.particles)
+        ])
+
+
+    def step(self, observation, resample_threshold=None, time_index=None, mcmc_steps=0, mcmc_cov=None):
+        """
+        Función que define una iteración para el Bootstrap Filter (predecir y actualizar) y devuelve el estado oculto estimado.
+        Si se cumplen las condiciones, se realiza un re-muestreo
+
+        Params:
+            -observation: vector con la observación $y_t$
+            -resample_threshold: condición de remuestreo
+        """
+
+        # Predicción 
+        regimes_previous = self.regimes.copy()
+        particles_previous = self.particles.copy()
+
+        # Evolucion del estado
+        for _ in range(self.transition_steps):
+            self.predict()
+
+        # Actualización
+        self.update(observation)
+
+        weights = self.get_weights()
+
+        # Estadística
+        intervals = self.credible_interval(weights)
+        estimate = self.estimate(weights)
+
+        particles_output = self.particles.copy()
+        weights_output = weights.copy()
+
+        # Remuestreo
+        if (
+            resample_threshold is not None
+            and self.effective_sample_size(weights) < resample_threshold
+        ):
+            idx = self.resample(weights)
+            self.resample_particles_indexes.append(np.asarray(idx))
+
+            # Guardar ancestros
+            ancestors = particles_previous[idx]
+
+            if time_index is not None:
+                self.resample_time_indexes.append(time_index)
+
+            # Rejuvenecimiento MCMC
+            if mcmc_steps > 0:
+
+                self.Random_Walk_Metropolis(observation=observation, ancestors=ancestors, proposal_cov=mcmc_cov, n_steps=mcmc_steps)
+
+        return estimate, weights_output, intervals, particles_output, self.particles, regimes_previous, self.regimes   
+
+
+    def run_filter(self, observations, resample_threshold=None, mcmc_steps=0, mcmc_cov=None):
+
+        start_time = time.perf_counter()
+
+        self.resample_times = 0
+        self.resample_time_indexes = []
+        self.log_norms = []
+
+        T = len(observations)
+
+        estimates = np.empty((T, self.state_dim))
+        weights_history = np.empty((T, self.N))
+        intervals_history = np.empty((T, self.state_dim, 2))
+        particles_history_pre_resampling = np.empty((T, self.N, self.state_dim))
+        particles_history_post_resampling = np.empty((T, self.N, self.state_dim))
+        regimes_history_pre_resampling = np.empty((T, self.N), dtype = int)
+        regimes_history_post_resampling = np.empty((T, self.N), dtype = int)
+
+
+        for k,y in enumerate(observations):
+            
+            estimates[k], weights_history[k], intervals_history[k], particles_history_pre_resampling[k], particles_history_post_resampling[k], regimes_history_pre_resampling[k], regimes_history_post_resampling[k] = \
+                self.step(y, resample_threshold=resample_threshold, time_index=k, mcmc_steps=mcmc_steps, mcmc_cov=mcmc_cov)
+
+
+        end_time = time.perf_counter()
+
+        time_execution = end_time - start_time
+
+        return {
+            "estimates": estimates,
+            "normalized_weights": weights_history,
+            "intervals": intervals_history,
+            "number_particles": self.N,
+            "number_resamples": self.resample_times,
+            "resample_time_indexes": self.resample_time_indexes,
+            "resample_particles_indexes": self.resample_particles_indexes,
+            "execution_time": time_execution,
+            "log_likelihoods": self.log_norms,
+            "log_likelihood": self.log_likelihood(),
+            "particles_pre_resampling": particles_history_pre_resampling,
+            "particles_post_resampling": particles_history_post_resampling,
+            "regimes_pre_resampling":regimes_history_pre_resampling,
+            "regimes_post_resampling":regimes_history_post_resampling,
+            }    
+    
+    
 
 class AuxiliaryParticleFilter(ParticleFilter):
     """
-    Esta subclase el caos concreto del Auxiliary Particle Filter 
+    Esta subclase el caso concreto del Auxiliary Particle Filter 
     donde la distribución de importancia es la distribución a priori: $p(x_t \mid x_{t-1}$ 
-    """  
+    """
+
+    def __init__(self, N, transition_model, observation_model, resample_method="systematic", level=0.95, transition_smoothness=1.0, observation_smoothness=1.0):
+
+        super().__init__( N=N, transition_model=transition_model, observation_model=observation_model, resample_method=resample_method, level=level, transition_smoothness=transition_smoothness, observation_smoothness=observation_smoothness)  
+
 
     def expected_state(self):
         """
@@ -316,11 +600,11 @@ class AuxiliaryParticleFilter(ParticleFilter):
             -means: array con la predicción del siguiente estado de cada partícula ($\hat{x}_t = f(x_{t-1})$)
         """
 
+        # Verosimilitud de los estados predichos
         log_aux = np.array([
             self.observation_model.loglikelihood(y, m)
             for m in means
         ])
-
 
         log_aux += self.log_weights
 
@@ -389,15 +673,16 @@ class AuxiliaryParticleFilter(ParticleFilter):
             for m in means
         ])
 
-        self.log_weights = ( log_true - log_lookahead)
+        self.log_weights = (log_true - log_lookahead)
 
         log_norm = logsumexp(self.log_weights)
 
         self.log_weights -= log_norm
 
         return log_norm
+    
 
-    def step(self, observation, resample_threshold=None):
+    def step(self, observation, resample_threshold=None, time_index=None, mcmc_steps=0, mcmc_cov=None):
         """
         Función que define una iteración para el Auxiliary Particle Filter y devuelve el estado oculto estimado.
         Si se cumplen las condiciones, se realiza un re-muestreo
@@ -407,6 +692,15 @@ class AuxiliaryParticleFilter(ParticleFilter):
             -resample_threshold: condición de remuestreo
         """
 
+        # Transiciones intermedias (no hay observaciones)
+        for _ in range(self.transition_steps - 1):
+            self.particles = np.array([
+                self.transition_model.sample(x)
+                for x in self.particles
+            ])
+
+
+        # Última transición + observación
         means = self.expected_state()
         
         aux_weights, log_aux_norm = self.auxiliary_weights(observation, means)
@@ -415,24 +709,252 @@ class AuxiliaryParticleFilter(ParticleFilter):
 
         self.propagation(x_prev)
 
+        # Corrección de pesos
         log_norm = self.weights_correction(observation, means_prev)
 
         self.log_norms.append(log_aux_norm + log_norm - np.log(self.N))
 
+        # Estimación
         weights = self.get_weights()
         intervals = self.credible_interval(weights)
 
         estimate = self.estimate(weights)
 
+        particles_output = self.particles.copy()
+        weights_output = weights.copy()
+
+        # Resamplin
         if (
             resample_threshold is not None
             and self.effective_sample_size(weights) < resample_threshold
         ):
-            self.resample(weights)
+            idx = self.resample(weights)
+            self.resample_particles_indexes.append(np.asarray(idx))
 
-        return estimate, weights, intervals
+            ancestors = self.particles[idx]
+
+            if time_index is not None:
+                self.resample_time_indexes.append(time_index)
+
+            if mcmc_steps > 0:
+                self.Random_Walk_Metropolis(observation=observation, ancestors=ancestors, proposal_cov=mcmc_cov, n_steps=mcmc_steps)
+
+        return estimate, weights_output, intervals, particles_output, self.particles
 
 
+class AuxiliaryParticleFilterRegime(AuxiliaryParticleFilter):
+
+    def __init__(self, N, transition_model, observation_model, resample_method="systematic", level=0.95, transition_smoothness=1.0, observation_smoothness=1.0):
+
+        super().__init__( N=N, transition_model=transition_model, observation_model=observation_model, resample_method=resample_method, level=level, transition_smoothness=transition_smoothness, observation_smoothness=observation_smoothness)
+
+        self.K = transition_model.K
+        self.regimes = np.zeros(self.N, dtype = int)
+
+
+    def initialize(self, mean, cov, initial_regime_probs=None):
+
+        super().initialize(mean, cov)
+
+        if initial_regime_probs is None:
+            initial_regime_probs = (self. transition_model.initial_regime_probs)
+
+        if initial_regime_probs is None:
+            initial_regime_probs = np.full(self.K, 1.0 / self.K)
+
+        initial_regime_probs = np.asarray(initial_regime_probs, dtype = float)
+
+        self.regimes = np.random.choice(self.K, size = self.N, p = initial_regime_probs)
+    
+
+    def reset(self, mean, cov, initial_regime_probs=None):
+
+        self.initialize(mean, cov, initial_regime_probs)
+        self.resample_times = 0
+        self.log_norms = []
+        self.resample_time_indexes = []
+        self.resample_particles_indexes = []
+
+
+    def resample(self, weights):
+
+        idx = RESAMPLERS[self.resample_method](weights)
+
+        self.particles = self.particles[idx]
+        self.regimes = self.regimes[idx]
+
+        self.log_weights = np.full(self.N, -np.log(self.N))
+
+        self.resample_times += 1
+
+        return idx
+
+
+    def expected_state(self):
+        """
+        particle i
+        |
+        |- regime[t-1, i]
+        |
+        |-P(r_t | r[t-1, i])
+        |
+        |-regimen previsto: r_pred
+        |
+        |-x_pred = f_{r_pred}(x[t-1])
+        """
+
+        # Se elige el régimen más probable. TODO: integral los posibles regímenes
+        predicted_regimes = np.argmax(
+            self.transition_model.regime_transition_matrix[self.regimes], axis=1
+        )
+
+        # Se predicen las partículas
+        means = np.array([ 
+            self.transition_model.predict(regime, x) for regime, x in zip(predicted_regimes, self.particles)
+        ])
+
+        return predicted_regimes, means
+
+
+    def select_ancestors(self, aux_weights, means):
+
+        ancestors = np.random.choice(self.N, size=self.N, p=aux_weights)
+
+        x_prev = self.particles[ancestors]
+        r_prev = self.regimes[ancestors]
+        means_prev = means[ancestors]
+
+        return (r_prev, x_prev, means_prev)
+
+
+    def propagate_regimes(self, r_prev):
+
+        self.regimes = np.array([
+            self.transition_model.sample_regime(r)
+            for r in r_prev
+        ])
+
+
+    def propagation(self, x_prev):
+
+        self.particles = np.array([
+            self.transition_model.sample(r, x) for r, x in zip(self.regimes, x_prev)
+        ])
+
+
+    def step(self, observation, resample_threshold=None, time_index=None, mcmc_steps=0, mcmc_cov=None):
+
+        # Transiciones intermedias (no hay observaciones)
+        for _ in range(self.transition_steps - 1):
+
+            self.regimes = np.array([
+                self.transition_model.sample_regim(r)
+                for r in self.regimes
+            ])
+
+            self.particles = np.array([
+                self.transition_model.sample(r, x)
+                for r, x in zip(self.regimes, self.particles)
+            ])
+
+
+        # Última transición + observación
+        predicted_regimes, means = self.expected_state()
         
+        aux_weights, log_aux_norm = self.auxiliary_weights(observation, means)
+
+        r_prev, x_prev, means_prev = self.select_ancestors(aux_weights, means)
+
+        self.propagate_regimes(r_prev)
+        self.propagation(x_prev)
+
+        # Corrección de pesos
+        log_norm = self.weights_correction(observation, means_prev)
+
+        self.log_norms.append(log_aux_norm + log_norm - np.log(self.N))
+
+        # Estimación
+        weights = self.get_weights()
+        intervals = self.credible_interval(weights)
+
+        estimate = self.estimate(weights)
+
+        regimes_output = self.regimes.copy()
+        particles_output = self.particles.copy()
+        weights_output = weights.copy()
+
+        # Resampling
+        if (
+            resample_threshold is not None
+            and self.effective_sample_size(weights) < resample_threshold
+        ):
+            idx = self.resample(weights)
+            self.resample_particles_indexes.append(np.asarray(idx))
+
+            ancestors = self.particles[idx]
+
+            if time_index is not None:
+                self.resample_time_indexes.append(time_index)
+
+            if mcmc_steps > 0:
+                self.Random_Walk_Metropolis(observation=observation, ancestors=ancestors, proposal_cov=mcmc_cov, n_steps=mcmc_steps)
+
+        return estimate, weights_output, intervals, particles_output, self.particles, regimes_output, self.regimes
+
+
+    def run_filter(self, observations, resample_threshold=None, mcmc_steps=0, mcmc_cov=None):
+
+        start_time = time.perf_counter()
+
+        self.resample_times = 0
+        self.resample_time_indexes = []
+        self.log_norms = []
+
+        T = len(observations)
+
+        estimates = np.empty((T, self.state_dim))
+        weights_history = np.empty((T, self.N))
+        intervals_history = np.empty((T, self.state_dim, 2))
+        particles_history_pre_resampling = np.empty((T, self.N, self.state_dim))
+        particles_history_post_resampling = np.empty((T, self.N, self.state_dim))
+        regimes_history_pre_resampling = np.empty((T, self.N), dtype = int)
+        regimes_history_post_resampling = np.empty((T, self.N), dtype = int)
+
+
+        for k,y in enumerate(observations):
+            
+            estimates[k], weights_history[k], intervals_history[k], particles_history_pre_resampling[k], particles_history_post_resampling[k], regimes_history_pre_resampling[k], regimes_history_post_resampling[k] = \
+                self.step(y, resample_threshold=resample_threshold, time_index=k, mcmc_steps=mcmc_steps, mcmc_cov=mcmc_cov)
+
+
+        end_time = time.perf_counter()
+
+        time_execution = end_time - start_time
+
+        return {
+            "estimates": estimates,
+            "normalized_weights": weights_history,
+            "intervals": intervals_history,
+            "number_particles": self.N,
+            "number_resamples": self.resample_times,
+            "resample_time_indexes": self.resample_time_indexes,
+            "resample_particles_indexes": self.resample_particles_indexes,
+            "execution_time": time_execution,
+            "log_likelihoods": self.log_norms,
+            "log_likelihood": self.log_likelihood(),
+            "particles_pre_resampling": particles_history_pre_resampling,
+            "particles_post_resampling": particles_history_post_resampling,
+            "regimes_pre_resampling":regimes_history_pre_resampling,
+            "regimes_post_resampling":regimes_history_post_resampling,
+            } 
+    
+
+
+
+
+    
+
+
+    
 
 

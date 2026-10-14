@@ -13,3 +13,6 @@ __pycache__/
 
 # Variables de entorno
 .env
+
+# Ignorar pkl
+*.pkl

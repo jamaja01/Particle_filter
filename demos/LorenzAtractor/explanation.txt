@@ -1,0 +1,9 @@
+-results_bpf_1
+-x_true_1
+-y_obs_1
+
+T=10000 R=Q=1.0
+
+-results_bpf_2 (filtrado de "y_obs_1" con parámetros "omega,rho,beta" desconocidos)
+-results_bpf_3 (filtrado de "y_obs_1" con parámetros "omega,rho,beta" desconocidos con Q=1e-8 para parámetros)
+-results_apf_1 (filtrado de "y_obs_1" con parámetros "omega,rho,beta" desconocidos con Q=1e-8 para parámetros)

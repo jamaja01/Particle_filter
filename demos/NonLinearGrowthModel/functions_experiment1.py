@@ -156,3 +156,43 @@ def calculate_mean_IC(results, Interval_cover):
         IC_per_simulation[q] = np.array(simulation_IC)
 
     return IC_results, IC_per_simulation
+
+
+def ESS_weights_mean_in_time(results, N_simulations, N_filter_runs, T_simul, N_particles):
+
+    weights_results = {}
+    ess_results = {}
+
+    for q_results in results:
+
+        q = q_results[0]["Q"]
+
+        norm_weights = np.zeros((N_simulations * N_filter_runs, T_simul, N_particles))
+        ess_norm = np.zeros((N_simulations * N_filter_runs, T_simul))
+
+        for i, simulation in enumerate(q_results):
+
+            for j, run in enumerate(simulation["runs"]):
+
+                norm_weights[ i * N_filter_runs + j, :, :] = run["normalized_weights"]
+
+                ess = 1.0 / np.sum( np.asarray(run["normalized_weights"])**2, axis=1 )
+                ess_norm[ i * N_filter_runs + j, : ] = ess / N_particles
+
+
+        mean_weights_per_run = np.mean(norm_weights, axis=2)
+
+        weights_results[q] = {
+            "mean": np.mean(mean_weights_per_run, axis=0),
+            "std": np.std(mean_weights_per_run, axis=0)
+        }
+
+        ess_results[q] = {
+            "mean": np.mean(ess_norm, axis=0),
+            "std": np.std(ess_norm, axis=0)
+        }
+
+    return weights_results, ess_results
+
+
+    

@@ -28,16 +28,23 @@ class GeneralObservationModel(ObservationModel):
 
     def __init__(self, observation, noise, loglikelihood=None):
 
-        super().__init__(noise.dim)
-        
+        if isinstance(noise, (list, tuple)):
+            self.noises = noise
+
+        else:
+            self.noises = [noise]
+
+        super().__init__(self.noises[0].dim)
+
         self.observation = observation
-        self.noise = noise
         self._loglikelihood = loglikelihood
 
 
     def sample(self, x):
-        v = self.noise.sample()
-        return self.observation(x, v)
+
+        noises = [noise.sample() for noise in self.noises]
+
+        return self.observation(x, *noises)
 
 
     def loglikelihood(self, y, x):
@@ -51,6 +58,8 @@ class GeneralObservationModel(ObservationModel):
 class AdditiveObservationModel(GeneralObservationModel):
 
     def __init__(self, h, noise):
+
+        self.h = h
 
         def observation(x, v):
             return h(x) + v

@@ -1,6 +1,6 @@
 import numpy as np
 from abc import ABC, abstractmethod
-from scipy.stats import multivariate_normal, multivariate_t, laplace
+from scipy.stats import multivariate_normal, multivariate_t, laplace, lognorm, uniform, expon, gamma, dgamma
 from particle_filter.utilities import as_covariance_matrix
 
 
@@ -253,3 +253,183 @@ class LaplaceNoise(NoiseModel):
                 scale=self.scale
             )
         )
+
+
+class LognormalNoise(NoiseModel):
+    """
+    Crea ruido con distribución lognormal. 
+    Si se tiene más de una dimensión, considera las compenentes del ruido independientes.    
+    
+    Params:
+        -dim: dimensión del ruido
+        -s: desviación estándar del logaritmo de la variable (s=\sigma)
+        -scale: la exponencial de la media del logaritmo de la variable (scale=exp(mu))
+    """
+
+    def __init__(self, dim, s, scale):
+        super().__init__(dim)
+
+        self.s = s
+        self.scale = scale
+
+
+    def sample(self):
+        return lognorm.rvs(
+            s = self.s,
+            loc = 0,
+            scale = self.scale,
+            size = self.dim   
+        )
+
+
+    def logpdf(self, x):
+        return np.sum(
+            lognorm.logpdf(
+                x,
+                s = self.s,
+                loc = 0,
+                scale=self.scale
+            )
+        )
+
+
+class UniformNoise(NoiseModel):
+
+    """
+    Crea ruido con distribución uniforme con componentes indepenedientes.
+    
+    Cada componente i sigue:
+        X_i \sim U(locs[i], locs[i]+scales[i])
+
+    Params:
+        -locs: límites inferirores de cada componente.
+        -scales: amplitudes de los intervalos.    
+    """
+
+    def __init__(self, locs, scales):
+
+        locs = np.atleast_1d(np.asarray(locs, dtype=float))
+        scales = np.atleast_1d(np.asarray(scales, dtype=float))
+
+        super().__init__(len(locs))
+
+        self.locs = locs
+        self.scales = scales
+
+
+    def sample(self):
+
+        return uniform.rvs(
+                loc=self.locs,
+                scale=self.scales
+        )
+
+
+    def logpdf(self, x):
+        
+        return np.sum(
+            uniform.logpdf(
+            x,
+            loc=self.locs,
+            scale=self.scales
+        ))
+
+
+class ExponentialNoise(NoiseModel):
+
+    """
+    Crea ruido con distribución exponencial con componentes indepenedientes.
+    
+    Cada componente i sigue:
+        X_i \sim Exp(lambdas)
+
+    Params:
+        -locs: localización de la distribución.
+        -lambdas: tasa de la distribucion exponencial.    
+    """
+
+    def __init__(self, lambdas, locs=None):
+
+        lambdas = np.atleast_1d(np.asarray(lambdas, dtype=float))
+        
+        if locs is None:
+            locs = np.zeros_like(lambdas)
+        else:
+            locs = np.atleast_1d(np.asarray(locs, dtype=float))
+
+        super().__init__(len(locs))
+
+        self.locs = locs
+        self.scales = 1 / lambdas
+
+
+    def sample(self):
+
+        return expon.rvs(
+            loc = self.locs,
+            scale = self.scales
+        )
+
+
+    def logpdf(self, x):
+
+        return np.sum(
+            expon.logpdf(
+            x,
+            loc = self.locs,
+            scale = self.scales
+        ))
+
+
+class GammaNoise(NoiseModel):
+
+    """
+    Crea ruido con distribución Gamma con componentes indepenedientes.
+    
+    Cada componente i sigue:
+        X_i \sim Gamma(shape_parameters[i], scale_parameters[i])
+
+    Params:
+        -shape_parameters: parametros de forma de la exponencial.
+        -scale_parameters: parámetros de escala de la exponencial.
+        -locs: desplazamiento de la exponencial    
+    """
+
+    def __init__(self, shape_parameters, scale_parameters, locs=None):
+
+        shape_parameters = np.atleast_1d(np.asarray(shape_parameters, dtype=float)) 
+        scale_parameters = np.atleast_1d(np.asarray(scale_parameters, dtype=float))
+        
+        if locs is None:
+            locs = np.zeros_like(shape_parameters)
+        else:
+            locs = np.atleast_1d(np.asarray(locs, dtype=float))
+        
+
+        super().__init__(len(locs))
+
+        self.shape_parameters = shape_parameters
+        self.scale_parameters = scale_parameters
+        self.locs = locs
+        
+
+    def sample(self):
+
+        return gamma.rvs(
+            self.shape_parameters,
+            loc = self.locs,
+            scale = self.scale_parameters
+        )
+
+
+    def logpdf(self, x):
+
+        return np.sum(
+            gamma.logpdf(
+            x,
+            self.shape_parameters,
+            loc = self.locs,
+            scale = self.scale_parameters
+        ))
+
+

@@ -1,0 +1,2 @@
+-results_1: resultados bpf, apf con remuestreo (N/2) y kf
+-results_2, results_3: resultados bpf, apf (con mismos datos que results_1) sin remuestreo y (mismo) kf

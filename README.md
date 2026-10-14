@@ -32,7 +32,9 @@ PARTICLE_FILTER/
 |        |          ├──kalman_filter.py #Script para implementar el filtro de Kalman
 |        |          |
 |        |          ├──particle_filter.py #Script con la clase Particle Filter y las subclases Bootstrap PF y Auxiliary PF
-|        |             
+|        |          |  
+|        |          ├──resampling_methods.py #Script con las funciones para el remuestreo
+|        |        
 |        ├──models 
 |        |    |
 |        |    ├──noise.py #Script con la definición de la clase Noise y sus subclases (GaussianNoise, LaplaceNoise)
@@ -49,7 +51,10 @@ PARTICLE_FILTER/
 |        |    ├──plot_results.py #Script para representar los resultados de uno o más algoritmos de filtrado
 |        |    |
 |        |    ├──plot_weights.py #Script para representar la distribución de pesos
-|        |    
+|        |    |
+|        |    ├──plot_ESS.py #Script para representar el número efectivo de partículas a través del tiempo  
+|        |    |
+|        |    ├──plot_particles_diversity.py #Script para representar la diversidad de partículas a través del tiempo
 |        |    
 |        ├──performance_metrics.py #Script que calcula métricas de rendimiento de algortimos
 |        |
@@ -79,20 +84,30 @@ El nucleo de este proyecto está en los algoritmos de filtrado
 
 La carpeta [demos] se tienen los siguientes ejemplos:
 
-- linear_examples: aplicacion y comparación de la implementación de los filtros de Kalman, Bootstrap PF y Auxiliary PF para sistemas lineales
+- linear_examples (por terminar): aplicacion y comparación de la implementación de los filtros de Kalman, Bootstrap PF y Auxiliary PF para sistemas lineales
 
-- pendulo_KalmanFilter_vs_ParticleFilter: comparación del filtro de Kalman (con la aproximación de pqeueños ángulos) y comparación con el Bootstrap PF y el Auxiliary PF a medida que aumenta el ángulo inicial
+- nonadditive (por terminar): aplicacion de ruidos no gaussianos
 
-- pendulo_comparacion_algoritmos: aplicacion del Bootstrap Particle Filter y del Auxiliary Particle Filter para el seguimiento de la posición y la velocidad angular de un péndulo libre. Compara los resultados para distintos números de partículas y según se realiza o no re-muestreo
+- Pendulum_Kalman_vs_PF: comparación del filtro de Kalman y el filtro de partículas para el péndulo.
+
+- NonLinearGrowthModel: comparación entre el BPF y el APF según el ruido del sistema y el número de partículas.
+
+- NonLinearGrowthModel_resampling: comparación entre el BPF y el APF según el criterio a la hora de realizar el filtrado.
+
+- Pendulum_smoothness: como afecta el efecto de la discretización al filtro de partículas.
+
+- Bimodal_Model: comparación de los tipos de remuestreo (Multinomial, Systematic y Residual) para un sistema bimodal.
 
 
 ### REQUIREMENTS
 Este proyecto requiere la instalación de numpy, scipy y matplotlib. 
 
-Para instalarlos, se recomienda en primer lugar crear un entorno virtual (venv) e instalarlos mediante el comando
-
+Para instalarlos, se recomienda en primer lugar crear un entorno virtual (venv) e instalarlos mediante el comando. 
 ```
 python -m pip install <paquete>
 ```
-
 Este comando garantiza que se está usando el módulo pip asociado al intérprete de Python.
+
+También se puede instalar a partir del archivo requirements.txt
+
+El proyecto utiliza el archivo pyproject.toml para definir su configuración y dependencias, así como para permitir la importación de los móudulo del proyecto entre sí.

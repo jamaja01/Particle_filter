@@ -70,6 +70,38 @@ def calculate_loglikelihood(results):
     return loglikelihood_results, loglikelihood_per_simulation
 
 
+# Calculo tiempo de ejecucion por N
+def calculate_execution_time(results):
+
+    time_execution_results = {}
+    time_execution_per_simulation = {}
+
+    for n_results in results:
+
+        n = n_results[0]["N"]
+
+        all_time_execution = []
+        simulation_time_execution = []
+
+        for simulation in n_results:
+            
+            run_time_execution = []
+
+            for run in simulation["runs"]:
+
+                time_execution = np.asarray(run["execution_time"]).squeeze()
+
+                run_time_execution.append(time_execution)
+                all_time_execution.append(time_execution)
+
+            # Promedio n_runs
+            simulation_time_execution.append(np.mean(run_time_execution))
+
+        time_execution_results[n] =np.array(all_time_execution)
+        time_execution_per_simulation[n] = np.array(simulation_time_execution)
+
+    return time_execution_results, time_execution_per_simulation
+
 # Calculo ESS/N por N
 def calculate_mean_ess(results):
 
@@ -156,3 +188,40 @@ def calculate_mean_IC(results, Interval_cover):
         IC_per_simulation[n] = np.array(simulation_IC)
 
     return IC_results, IC_per_simulation
+
+
+def ESS_weights_mean_in_time2(results, N_simulations, N_filter_runs, T_simul):
+
+    weights_results = {}
+    ess_results = {}
+
+    for n_results in results:
+
+        n = n_results[0]["N"]
+
+        norm_weights = np.zeros((N_simulations * N_filter_runs, T_simul, n))
+        ess_norm = np.zeros((N_simulations * N_filter_runs, T_simul))
+
+        for i, simulation in enumerate(n_results):
+
+            for j, run in enumerate(simulation["runs"]):
+
+                norm_weights[ i * N_filter_runs + j, :, :] = run["normalized_weights"]
+
+                ess = 1.0 / np.sum( np.asarray(run["normalized_weights"])**2, axis=1 )
+                ess_norm[ i * N_filter_runs + j, : ] = ess / n
+
+
+        mean_weights_per_run = np.mean(norm_weights, axis=2)
+
+        weights_results[n] = {
+            "mean": np.mean(mean_weights_per_run, axis=0),
+            "std": np.std(mean_weights_per_run, axis=0)
+        }
+
+        ess_results[n] = {
+            "mean": np.mean(ess_norm, axis=0),
+            "std": np.std(ess_norm, axis=0)
+        }
+
+    return weights_results, ess_results
